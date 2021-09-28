@@ -1,0 +1,215 @@
+---
+title: "DATA 606 - Lab 4 - Distributions of Random Variables"
+author: "Preston Peck"
+date: "`r Sys.Date()`"
+output: openintro::lab_report
+---
+
+# Distributions of Random Variables
+
+<https://htmlpreview.github.io/?https://github.com/jbryer/DATA606/blob/master/inst/labs/Lab4/Lab4_normal_distribution.html>
+
+```{r load-packages, message=FALSE}
+library(tidyverse)
+library(openintro)
+library(DATA606)
+library(psych)
+```
+
+```{r include=FALSE}
+# https://stackoverflow.com/questions/61339178/overlay-normal-curve-to-histogram-in-ggplot2
+
+hist.default <- function(x,
+  breaks = "Sturges",
+  freq = NULL,
+  include.lowest = TRUE,
+  normalcurve = TRUE,
+  right = TRUE,
+  density = NULL,
+  angle = 45,
+  col = NULL,
+  border = NULL,
+  main = paste("Histogram of", xname),
+  ylim = NULL,
+  xlab = xname,
+  ylab = NULL,
+  axes = TRUE,
+  plot = TRUE,
+  labels = FALSE,
+  warn.unused = TRUE,
+  ...
+) {
+  # https://stackoverflow.com/a/20078645/4575331
+  xname <- paste(deparse(substitute(x), 500), collapse = "\n")
+
+  suppressWarnings(
+    h <- graphics::hist.default(
+      x = x,
+      breaks = breaks,
+      freq = freq,
+      include.lowest = include.lowest,
+      right = right,
+      density = density,
+      angle = angle,
+      col = col,
+      border = border,
+      main = main,
+      ylim = ylim,
+      xlab = xlab,
+      ylab = ylab,
+      axes = axes,
+      plot = plot,
+      labels = labels,
+      warn.unused = warn.unused,
+      ...
+    )
+  )
+
+  if (normalcurve == TRUE & plot == TRUE) {
+    x <- x[!is.na(x)]
+    
+    xfit <- seq(min(x), max(x), length = 40)
+    yfit <- dnorm(xfit, mean = mean(x), sd = sd(x))
+
+    if (isTRUE(freq) | (is.null(freq) & is.null(density))) {
+      yfit <- yfit * diff(h$mids[1:2]) * length(x)
+    }
+    
+    lines(xfit, yfit, col = "red", lwd = 2)
+  }
+
+  if (plot == TRUE) {
+    invisible(h)
+  } else {
+    h
+  }
+}
+```
+
+### Exercise 1
+
+Dairy Queen has more of a normal distribution of calories from fat when compared to McDonalds. Both are unimodal and right skewed, though McDonalds has the more pronounced right skew due to a large early cluster of values despite having a max value that is double Dairy Queen's.
+
+```{r fat-calorie-dist}
+fastfood
+summary(fastfood)
+
+mcdonalds <- fastfood %>%
+  filter(restaurant == "Mcdonalds")
+dairy_queen <- fastfood %>%
+  filter(restaurant == "Dairy Queen")
+
+describe(mcdonalds$cal_fat)
+hist(mcdonalds$cal_fat)
+
+describe(dairy_queen$cal_fat)
+hist(dairy_queen$cal_fat)
+```
+
+### Exercise 2
+
+The distribution is very nearly a normal distribution except that it's not exactly symmetrical. There are more values in the first quadrant than in the last quadrant when they should be representing equal populations and negligible populations at that.
+
+```{r cal-fat-tomato}
+dqmean <- mean(dairy_queen$cal_fat)
+dqsd <- sd(dairy_queen$cal_fat)
+
+ggplot(data = dairy_queen, aes(x = cal_fat)) +
+  geom_blank() +
+  geom_histogram(aes(y = ..density..)) +
+  stat_function(fun = dnorm, args = c(mean = dqmean, sd = dqsd), col = "tomato")
+```
+        
+### Exercise 3
+
+The simulations are similar and seem within a reasonable margin of error, but they seem to account for lower values between the -2 to -1 quantile than the real data does which shows more of a left skew in that most of it sighter values fall on the trend line.
+
+```{r npp-sim-norm}
+set.seed(37)
+sim_norm <- rnorm(n = nrow(dairy_queen), mean = dqmean, sd = dqsd)
+
+ggplot(data = NULL, aes(sample = sim_norm)) +
+  geom_line(stat = "qq")
+
+qqnormsim(sim_norm)
+hist(sim_norm)
+```
+
+### Exercise 4
+
+Most points in the real data set and simulated sets fall very consistently on their respective trend lines, which is supported by a histogram curve that very nearly matches the standard bell curve that tapers off on either end.
+
+```{r npp-cal-from-fat}
+qqnormsim(dairy_queen$cal_fat)
+hist(dairy_queen$cal_fat)
+```
+
+### Exercise 5
+
+The McDonalds probability plots show emphases towards values on the lower end with values on the higher end often being excluded from the trend line. Plotting a histogram, a right skew is very evident.
+
+```{r npp-cal-mc}
+qqnormsim(mcdonalds$calories)
+hist(mcdonalds$cal_fat)
+```
+
+### Exercise 6
+
+Dairy Queen is the best candidate for analyzing sugar and calcium since it's primarily a dairy dessert destination. I expect that the probability of buying an item that will exceed half od one's recommended sugar intake per day will be very high (12 grams). Analysis shows that the number of items that satisfy this condition are in the vast minority however.
+
+```{r npp-custom}
+sugarDailyServing <- 12
+
+sugarMean <- mean(dairy_queen$sugar)
+sugarSd <- sd(dairy_queen$sugar)
+
+pnorm(sugarDailyServing, sugarMean, sugarSd)
+dairy_queen %>%
+  filter(sugar < sugarDailyServing) %>%
+  summarise(n() / nrow(dairy_queen))
+
+1 - pnorm(sugarDailyServing, sugarMean, sugarSd)
+dairy_queen %>%
+  filter(sugar > sugarDailyServing) %>%
+  summarise(n() / nrow(dairy_queen))
+
+qqnormsim(dairy_queen$sugar)
+hist(dairy_queen$sugar)
+```
+
+### Exercise 7
+
+Burger King and Arby's have distributions that are the closest to the standard distribution model.
+
+```{r npp-sodium}
+restaurantNames <- fastfood$restaurant %>%
+  unique
+restaurantNames
+
+for (x in 1:length(restaurantNames)) {
+  restaurantName <- restaurantNames[x]
+  restaurantSodium <- (fastfood %>%
+    filter(restaurant == restaurantName))$sodium
+  
+  print(paste(restaurantName, "↓", sep = " "))
+  qqnormsim(restaurantSodium)
+  hist(restaurantSodium)
+}
+```
+  
+### Exercise 8
+
+The steps indicate larger bins as opposed to smaller granular bins with many unique values that might better smooth the curve. That might indicate that salt is added or marketed in more controlled and consistent increments.
+
+```{r sodium}
+  summary(fastfood$sodium)
+```
+
+### Exercise 9
+
+Judging by the normal probability plot, the data set is right skewed because the trend line prioritizes lower values towards 0, which would account for values along the left side on the histogram. The resulting histogram confirms the skew in that in its overall range of 0-140, most values fall between a very early range of 20-50
+
+```{r npp-carbs}
+qqnormsim(dairy_queen$total_carb)
+hist(dairy_queen$total_carb)
+```
